@@ -1,0 +1,9 @@
+.gradle
+.idea
+.qodana
+build
+**/.DS_Store
+src/main/java
+out
+gradle
+kotlin-js-store
