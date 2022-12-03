@@ -30,8 +30,10 @@ fun HTMLTextAreaElement.isCursorInsideGrammar() = "---" in value.substring(0, in
 
 fun processEditorContents() {
   preprocessGrammar()
-  ongoingWork?.cancel()
-  ongoingWork = updateRecommendations()
+  GlobalScope.promise {
+    ongoingWork?.cancel()
+    ongoingWork = updateRecommendations()
+  }
 }
 
 fun updateRecommendations() =
@@ -55,7 +57,12 @@ fun CoroutineScope.handleInput() {
   else {
     outputField.textContent = "Solving: $line"
     println("Repairing $line")
-    repair(line, cfg!!, synthesizer = { line.tokenizeByWhitespace().solve(cfg!!, checkInterrupted = { isActive }) }, updateProgress = { updateProgress(it) })
+    repair(
+      prompt = line,
+      cfg= cfg!!,
+      synthesizer = { it.solve(cfg!!, checkInterrupted = { isActive }) },
+      updateProgress = { updateProgress(it) }
+    )
       .also { println("Found ${it.size} repairs") }
       .let { outputField.textContent = it.joinToString("\n") }
   }
