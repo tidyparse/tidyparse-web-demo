@@ -1,30 +1,62 @@
-import ai.hypergraph.kaliningraph.parsing.CFG
-import ai.hypergraph.kaliningraph.parsing.parse
-import ai.hypergraph.kaliningraph.parsing.parseCFG
+import ai.hypergraph.kaliningraph.image.escapeHTML
+import ai.hypergraph.kaliningraph.parsing.*
 import org.w3c.dom.Node
 import kotlinx.browser.document
+import kotlinx.coroutines.*
 import org.w3c.dom.HTMLTextAreaElement
 
 var cfg: CFG? = null
-var grammar = null
+var cachedGrammar: String? = null
 
 fun main() {
-  // Listens for input to text area with id "tidyparse-input" and prints the key pressed to "tidyparse-output"
-  val input = document.getElementById("tidyparse-input") as HTMLTextAreaElement
-  val output = document.getElementById("tidyparse-output") as Node
-
-  if (grammar != input.value.substringBefore("---"))
-  cfg = input.value.substringBefore("---").parseCFG()
-
-  // Prints current line to output after each key press
-  input.addEventListener("input", { processEditorContents(output, input) })
+  preprocessGrammar()
+  inputField.addEventListener("input", { processEditorContents() })
 }
 
-fun processEditorContents(output: Node, input: HTMLTextAreaElement) {
-  val isInsideGrammar = "---" in input.value.substring(0, input.selectionStart!!)
-  if(!isInsideGrammar) return
-  val str = input.value
-  val line = str.substring(0, input.selectionStart!!).split("\n").last()
-  val t= cfg?.parse(line)?.prettyPrint()
-  output.textContent = "Parsing: $line\n\n$t"
+var ongoingWork: Job? = null
+val inputField by lazy { document.getElementById("tidyparse-input") as HTMLTextAreaElement }
+val outputField by lazy { document.getElementById("tidyparse-output") as Node }
+
+fun preprocessGrammar() {
+  val currentGrammar = inputField.grammar()
+  if (cachedGrammar != currentGrammar) cfg = currentGrammar.parseCFG()
+  cachedGrammar = currentGrammar
+}
+
+fun HTMLTextAreaElement.grammar(): String = value.substringBefore("---")
+fun HTMLTextAreaElement.getEndOfLineIdx() = value.indexOf("\n", selectionStart!!)
+fun HTMLTextAreaElement.getCurrentLine() = value.substring(0, getEndOfLineIdx()).split("\n").last()
+fun HTMLTextAreaElement.isCursorInsideGrammar() = "---" in value.substring(0, inputField.selectionStart!!)
+
+fun processEditorContents() {
+  preprocessGrammar()
+  ongoingWork?.cancel()
+  ongoingWork = updateRecommendations()
+}
+
+fun updateRecommendations() =
+  GlobalScope.launch { withTimeout(10000L) { handleInput() } }
+
+fun updateProgress(query: String) {
+  val sanitized = query.escapeHTML()
+  outputField.textContent =
+    outputField.textContent?.replace(
+      "Solving:.*\n".toRegex(),
+      "Solving: $sanitized\n"
+    )
+}
+
+fun CoroutineScope.handleInput() {
+  if (!inputField.isCursorInsideGrammar()) return
+  val line = inputField.getCurrentLine()
+  val tree= cfg!!.parse(line)?.prettyPrint()
+  outputField.textContent
+  if (tree != null) outputField.textContent = "Parsing: $line\n\n$tree"
+  else {
+    outputField.textContent = "Solving: $line"
+    println("Repairing $line")
+    repair(line, cfg!!, synthesizer = { line.tokenizeByWhitespace().solve(cfg!!, checkInterrupted = { isActive }) }, updateProgress = { updateProgress(it) })
+      .also { println("Found ${it.size} repairs") }
+      .let { outputField.textContent = it.joinToString("\n") }
+  }
 }
