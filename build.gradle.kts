@@ -1,5 +1,6 @@
 plugins {
-    kotlin("js") version "1.7.10"
+  kotlin("js") version "1.8.0-RC"
+  id("com.github.ben-manes.versions") version "0.44.0"
 }
 
 group = "me.breandan"
