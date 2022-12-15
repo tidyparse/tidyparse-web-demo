@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "me.breandan"
-version = "1.0-SNAPSHOT"
+version = "0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -13,7 +13,7 @@ repositories {
 
 dependencies {
   testImplementation(kotlin("test"))
-  implementation("org.jetbrains.kotlinx:kotlinx-html:0.8.0")
+  implementation("org.jetbrains.kotlinx:kotlinx-html:0.8.1")
   implementation("ai.hypergraph:kaliningraph")
 //  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
@@ -27,4 +27,3 @@ kotlin {
       browser()
     }
 }
-

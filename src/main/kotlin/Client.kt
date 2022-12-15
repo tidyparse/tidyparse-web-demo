@@ -8,6 +8,7 @@ import org.w3c.dom.HTMLTextAreaElement
 var cfg: CFG? = null
 var cachedGrammar: String? = null
 
+// ./gradlew browserDevelopmentRun --continuous
 fun main() {
   preprocessGrammar()
   inputField.addEventListener("input", { processEditorContents() })
@@ -29,15 +30,12 @@ fun HTMLTextAreaElement.getCurrentLine() = value.substring(0, getEndOfLineIdx())
 fun HTMLTextAreaElement.isCursorInsideGrammar() = "---" in value.substring(0, inputField.selectionStart!!)
 
 fun processEditorContents() {
-  preprocessGrammar()
-  GlobalScope.promise {
-    ongoingWork?.cancel()
-    ongoingWork = updateRecommendations()
-  }
+  ongoingWork?.cancel()
+  ongoingWork = updateRecommendations()
 }
 
 fun updateRecommendations() =
-  GlobalScope.launch { withTimeout(10000L) { handleInput() } }
+  GlobalScope.async { withTimeout(10000L) { handleInput() } }
 
 fun updateProgress(query: String) {
   val sanitized = query.escapeHTML()
@@ -48,22 +46,26 @@ fun updateProgress(query: String) {
     )
 }
 
-fun CoroutineScope.handleInput() {
+suspend fun CoroutineScope.handleInput() {
+  preprocessGrammar()
   if (!inputField.isCursorInsideGrammar()) return
   val line = inputField.getCurrentLine()
   val tree= cfg!!.parse(line)?.prettyPrint()
-  outputField.textContent
   if (tree != null) outputField.textContent = "Parsing: $line\n\n$tree"
   else {
-    outputField.textContent = "Solving: $line"
+    outputField.textContent = "Solving: $line\n"
     println("Repairing $line")
-    repair(
-      prompt = line,
-      cfg= cfg!!,
-      synthesizer = { it.solve(cfg!!, checkInterrupted = { isActive }) },
-      updateProgress = { updateProgress(it) }
-    )
-      .also { println("Found ${it.size} repairs") }
-      .let { outputField.textContent = it.joinToString("\n") }
+    // Block names from repair since we don't have a good way to handle them yet
+    cfg?.terminals?.filter { it.all { it.isLetterOrDigit() } }
+      ?.let { cfg?.blocked?.addAll(it) }
+
+        repair(
+          prompt = line,
+          cfg = cfg!!,
+          synthesizer = { it.solve(cfg!!, takeMoreWhile = { isActive }) },
+          updateProgress = { updateProgress(it) }
+        )
+          .also { println("Found ${it.size} repairs") }
+          .let { outputField.textContent = it.joinToString("\n") }
   }
 }
